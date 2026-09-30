@@ -8,6 +8,7 @@
   import { Surface, Icon } from '$lib/theme';
   import { theme } from '$lib/stores/theme';
   import { streamerMode } from '$lib/stores/streamer';
+  import { terminalCtrlClipboard } from '$lib/stores/terminalClipboard';
   import { refreshInterval, REFRESH_OPTIONS } from '$lib/stores/settings';
   import { traySupport, trayBehavior } from '$lib/stores/tray';
   import { isMac } from '$lib/platform';
@@ -137,6 +138,38 @@
         </button>
       </div>
     </Surface>
+
+    <!-- Terminal (macOS copies and pastes with Cmd, so it has nothing to switch) -->
+    {#if !isMac}
+      <Surface class="p-5">
+        <h2 class="mb-3 text-sm font-semibold">Terminal</h2>
+        <div class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <p class="text-sm">Copy and paste with Ctrl+C / Ctrl+V</p>
+            <p class="text-xs text-muted">
+              Ctrl+C copies the selection, or interrupts when nothing is selected. Turn off to
+              send ^V to the remote. Ctrl+Shift+C / Ctrl+Shift+V always work.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={$terminalCtrlClipboard}
+            aria-label="Copy and paste with Ctrl+C / Ctrl+V"
+            onclick={() => terminalCtrlClipboard.toggle()}
+            class="relative h-6 w-11 shrink-0 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus {$terminalCtrlClipboard
+              ? 'bg-accent'
+              : 'bg-surface-inset'}"
+          >
+            <span
+              class="absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow-soft transition-[left] {$terminalCtrlClipboard
+                ? 'left-[1.375rem]'
+                : 'left-0.5'}"
+            ></span>
+          </button>
+        </div>
+      </Surface>
+    {/if}
 
     <!-- Dashboard -->
     <Surface class="p-5">

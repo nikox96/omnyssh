@@ -6,6 +6,7 @@
   import { theme } from '$lib/stores/theme';
   import { sidebarCollapsed } from '$lib/stores/ui';
   import { streamerMode } from '$lib/stores/streamer';
+  import { terminalCtrlClipboard } from '$lib/stores/terminalClipboard';
   import { refreshInterval, driveMetricsRefresh } from '$lib/stores/settings';
   import { trayBehavior, driveTray } from '$lib/stores/tray';
   import { lastError } from '$lib/stores/notifications';
@@ -20,6 +21,7 @@
     void theme.hydrate();
     void sidebarCollapsed.hydrate();
     void streamerMode.hydrate();
+    void terminalCtrlClipboard.hydrate();
     void refreshInterval.hydrate();
     void trayBehavior.hydrate();
     // Force a metric refresh on the user's interval; re-arms when the interval changes.

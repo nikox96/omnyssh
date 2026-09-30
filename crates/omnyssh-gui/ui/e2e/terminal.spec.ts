@@ -317,14 +317,41 @@ test('Ctrl+Shift+C copies the selection and sends the shell nothing', async ({ p
   await expect.poll(() => copied(page)).toEqual(['omnyssh-ready>']);
   expect(await writes(page)).toEqual([]);
 
-  // Bare Ctrl+C stays the interrupt, selection or not.
+  // Ctrl+Shift+V is the webview's own paste; xterm must not turn it into ^V or a V.
+  await page.keyboard.press('Control+Shift+V');
+  expect(await writes(page)).toEqual([]);
+});
+
+test('bare Ctrl+C copies a selection, then interrupts once it is cleared', async ({ page }) => {
+  await bootWithClipboard(page);
+  await selectPrompt(page);
+
+  await page.keyboard.press('Control+C');
+  await expect.poll(() => copied(page)).toEqual(['omnyssh-ready>']);
+  expect(await writes(page)).toEqual([]);
+
+  // The copy cleared the selection, so the next Ctrl+C is the interrupt.
   await page.keyboard.press('Control+C');
   await expect.poll(() => writes(page)).toEqual([[3]]);
   expect(await copied(page)).toEqual(['omnyssh-ready>']);
 
-  // Ctrl+Shift+V is the webview's own paste; xterm must not turn it into ^V or a V.
-  await page.keyboard.press('Control+Shift+V');
-  expect(await writes(page)).toEqual([[3]]);
+  // Bare Ctrl+V is the webview's own paste too: never a ^V to the shell.
+  await page.keyboard.press('Control+V');
+  expect(await writes(page)).not.toContainEqual([22]);
+});
+
+test('with the Ctrl clipboard pref off, Ctrl+C and Ctrl+V reach the shell', async ({ page }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem('omnyssh-terminal-ctrl-clipboard', 'false')
+  );
+  await bootWithClipboard(page);
+  await selectPrompt(page);
+
+  await page.keyboard.press('Control+C');
+  await expect.poll(() => writes(page)).toEqual([[3]]);
+  await page.keyboard.press('Control+V');
+  await expect.poll(() => writes(page)).toEqual([[3], [22]]);
+  expect(await copied(page)).toEqual([]);
 });
 
 test('Ctrl+Shift+C with nothing selected copies nothing', async ({ page }) => {
@@ -359,10 +386,15 @@ test('under a non-Latin layout Ctrl+C still interrupts and Ctrl+Shift+V still pa
   await press('KeyC', false, 67);
   await expect.poll(() => writes(page)).toEqual([[3], [3]]);
 
+  const pasted = () =>
+    page.evaluate(() => (window as unknown as { __pasted?: number }).__pasted);
   await press('KeyV', true);
-  await expect
-    .poll(() => page.evaluate(() => (window as unknown as { __pasted?: number }).__pasted))
-    .toBe(1);
+  await expect.poll(pasted).toBe(1);
+  expect(await writes(page)).toEqual([[3], [3]]);
+
+  // Bare Ctrl+V pastes the same way there, rather than falling back to ^V.
+  await press('KeyV', false);
+  await expect.poll(pasted).toBe(2);
   expect(await writes(page)).toEqual([[3], [3]]);
 });
 

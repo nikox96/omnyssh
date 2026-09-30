@@ -2,8 +2,8 @@
 // paste would serialize as one giant array on the main thread and freeze the UI, so the
 // view splits it into bounded chunks and awaits each (yielding between). This is the
 // pure split; the view owns the ordered dispatch. The Ctrl chords xterm cannot handle
-// itself — the copy shortcut, and those WebKitGTK leaves unnamed under a non-Latin
-// layout — are decided here too, before xterm turns the key into input.
+// itself — the copy and paste shortcuts, and those WebKitGTK leaves unnamed under a
+// non-Latin layout — are decided here too, before xterm turns the key into input.
 
 /** The per-write byte cap. Small enough that one chunk's `number[]` serialization is
  *  imperceptible, so a multi-MB paste streams without a visible stall (§9). */
@@ -30,16 +30,34 @@ function nonLatinLetter(key: string): boolean {
   return /^\p{L}$/u.test(key) && !/\p{Script=Latin}/u.test(key);
 }
 
-/** Ctrl+Shift+C on Windows and Linux, as in GNOME Terminal and Windows Terminal: a bare
- *  Ctrl+C has to stay ^C. macOS needs none — Cmd+C copies there through the Edit menu.
- *  The webview pastes Ctrl+Shift+V natively, except where `layoutFallback` steps in. */
-export function isCopyShortcut(e: KeyPress, mac: boolean): boolean {
+/** Ctrl+`letter` (with Shift exactly when `shift`) on Windows and Linux. macOS needs none
+ *  of these — Cmd+C and Cmd+V work there through the Edit menu. */
+function ctrlChord(e: KeyPress, mac: boolean, letter: 'C' | 'V', shift: boolean): boolean {
   // keyCode 229 marks the keydown that starts an IME composition.
   if (mac || e.type !== 'keydown' || e.isComposing || e.keyCode === 229) return false;
-  if (e.altKey || e.metaKey || !e.ctrlKey || !e.shiftKey) return false;
+  if (e.altKey || e.metaKey || !e.ctrlKey || e.shiftKey !== shift) return false;
   // The physical key stands in only where the layout puts a non-Latin letter on it, so
   // a Cyrillic layout copies with the same keys while Dvorak's J there stays a J.
-  return e.key === 'c' || e.key === 'C' || (e.code === 'KeyC' && nonLatinLetter(e.key));
+  return (
+    e.key.toUpperCase() === letter || (e.code === `Key${letter}` && nonLatinLetter(e.key))
+  );
+}
+
+/** Ctrl+Shift+C, as in GNOME Terminal and Windows Terminal: always a copy, never ^C.
+ *  The webview pastes Ctrl+Shift+V natively, except where `layoutFallback` steps in. */
+export function isCopyShortcut(e: KeyPress, mac: boolean): boolean {
+  return ctrlChord(e, mac, 'C', true);
+}
+
+/** A bare Ctrl+C: a copy only when the Ctrl clipboard pref is on and text is selected
+ *  (the view decides both), ^C otherwise, as in Windows Terminal. */
+export function isBareCopy(e: KeyPress, mac: boolean): boolean {
+  return ctrlChord(e, mac, 'C', false);
+}
+
+/** A bare Ctrl+V: a paste when the Ctrl clipboard pref is on, ^V otherwise. */
+export function isBarePaste(e: KeyPress, mac: boolean): boolean {
+  return ctrlChord(e, mac, 'V', false);
 }
 
 /** Enter or Esc, unmodified and outside an IME composition: what closes a tab whose

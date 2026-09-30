@@ -3,6 +3,8 @@ import {
   chunkBytes,
   closesEndedTab,
   INPUT_CHUNK,
+  isBareCopy,
+  isBarePaste,
   isCopyShortcut,
   layoutFallback,
   type KeyPress
@@ -86,6 +88,45 @@ describe('closesEndedTab — Enter or Esc dismisses a tab whose session ended', 
     // Enter that commits a composition belongs to the IME.
     expect(closesEndedTab(key('Enter', { isComposing: true }))).toBe(false);
     expect(closesEndedTab(key('Enter', { keyCode: 229 }))).toBe(false);
+  });
+});
+
+// The bare chords: the view copies on Ctrl+C only with a selection and the pref on.
+const bare = (over: Partial<KeyPress> = {}): KeyPress => press({ key: 'c', shiftKey: false, ...over });
+const bareV = (over: Partial<KeyPress> = {}): KeyPress =>
+  bare({ key: 'v', code: 'KeyV', keyCode: 86, ...over });
+
+describe('isBareCopy / isBarePaste — plain Ctrl+C and Ctrl+V', () => {
+  it('matches Ctrl+C and Ctrl+V without Shift, whichever case the key reports', () => {
+    expect(isBareCopy(bare(), false)).toBe(true);
+    expect(isBareCopy(bare({ key: 'C' }), false)).toBe(true);
+    expect(isBarePaste(bareV(), false)).toBe(true);
+    expect(isBarePaste(bareV({ key: 'V' }), false)).toBe(true);
+  });
+
+  it('leaves the Shift chords to isCopyShortcut and the native paste', () => {
+    expect(isBareCopy(bare({ shiftKey: true }), false)).toBe(false);
+    expect(isBarePaste(bareV({ shiftKey: true }), false)).toBe(false);
+  });
+
+  it('does not mix up the two letters', () => {
+    expect(isBareCopy(bareV(), false)).toBe(false);
+    expect(isBarePaste(bare(), false)).toBe(false);
+  });
+
+  it('follows the physical key only under a non-Latin layout', () => {
+    expect(isBareCopy(bare({ key: 'с', keyCode: 0 }), false)).toBe(true);
+    expect(isBarePaste(bareV({ key: 'м', keyCode: 0 }), false)).toBe(true);
+    expect(isBareCopy(bare({ key: 'j' }), false)).toBe(false);
+  });
+
+  it('ignores extra modifiers, non-keydown events, composition and macOS', () => {
+    expect(isBareCopy(bare({ altKey: true }), false)).toBe(false);
+    expect(isBarePaste(bareV({ metaKey: true }), false)).toBe(false);
+    expect(isBareCopy(bare({ type: 'keyup' }), false)).toBe(false);
+    expect(isBarePaste(bareV({ isComposing: true }), false)).toBe(false);
+    expect(isBareCopy(bare(), true)).toBe(false);
+    expect(isBarePaste(bareV(), true)).toBe(false);
   });
 });
 

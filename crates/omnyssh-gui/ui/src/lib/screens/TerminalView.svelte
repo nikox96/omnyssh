@@ -25,8 +25,16 @@
     terminalPaste
   } from '$lib/ipc/commands';
   import { shouldFadeTop } from './terminalFade';
-  import { chunkBytes, closesEndedTab, isCopyShortcut, layoutFallback } from './terminalInput';
+  import {
+    chunkBytes,
+    isBareCopy,
+    isBarePaste,
+    closesEndedTab,
+    isCopyShortcut,
+    layoutFallback
+  } from './terminalInput';
   import { isMac } from '$lib/platform';
+  import { terminalCtrlClipboard } from '$lib/stores/terminalClipboard';
   import type { TerminalBytes } from '$lib/bindings';
 
   let { session, active }: { session: Session; active: boolean } = $props();
@@ -174,12 +182,37 @@
       // Copy takes Ctrl+Shift+C whether or not anything is selected, so the chord never
       // reaches the shell. Returning false only keeps xterm out of it; the default is
       // ours to stop. The write happens inside the keydown, which WebKit requires.
+      // With the Ctrl clipboard pref on, a bare Ctrl+C copies too, but only a selection
+      // (and clears it, so the next Ctrl+C interrupts); with nothing selected it stays ^C.
+      const copySelection = (): void => {
+        if (!term?.hasSelection()) return;
+        navigator.clipboard.writeText(term.getSelection()).catch((err) => {
+          lastError.set(`Copy failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
+      };
       term.attachCustomKeyEventHandler((e) => {
         if (isCopyShortcut(e, isMac)) {
           e.preventDefault();
-          if (term?.hasSelection()) {
-            navigator.clipboard.writeText(term.getSelection()).catch((err) => {
-              lastError.set(`Copy failed: ${err instanceof Error ? err.message : String(err)}`);
+          copySelection();
+          return false;
+        }
+        const ctrlClipboard = get(terminalCtrlClipboard);
+        if (ctrlClipboard && isBareCopy(e, isMac) && term?.hasSelection()) {
+          e.preventDefault();
+          e.stopPropagation();
+          copySelection();
+          term.clearSelection();
+          return false;
+        }
+        // A bare Ctrl+V pastes like Ctrl+Shift+V: xterm stays out and the webview's own
+        // paste lands in xterm's textarea, so bracketed paste and chunking still apply.
+        // WebKitGTK under a non-Latin layout (keyCode 0) runs no native paste; ask it.
+        if (ctrlClipboard && isBarePaste(e, isMac)) {
+          if (e.keyCode === 0) {
+            e.preventDefault();
+            e.stopPropagation();
+            terminalPaste().catch((err) => {
+              lastError.set(`Paste failed: ${err instanceof Error ? err.message : String(err)}`);
             });
           }
           return false;
